@@ -132,6 +132,18 @@ int main(){
     //CREATE SEMAPHORES
     JSemaphores = new sem_t[A_rows];    
     LSemaphores = new sem_t[C_cols];
+    for(int i = 0; i < A_rows; i++){
+        if (sem_init(&JSemaphores[i], 0, 0) != 0) {
+            cerr << "sem_init error" << endl;
+            return 1;
+        }
+    }
+    for(int i = 0; i < C_cols; i++){
+        if (sem_init(&LSemaphores[i], 0, 0) != 0) {
+            cerr << "sem_init error" << endl;
+            return 1;
+        }
+    }
 
     for(int i = 0; i < A_rows; i++){
         //initialize threads
