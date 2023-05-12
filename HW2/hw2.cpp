@@ -1,6 +1,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <iostream>
+#include "hw2_output.c"
 
 int A_rows, A_cols, B_rows, B_cols, C_rows, C_cols, D_rows, D_cols;
 int ** A, ** B, ** C, ** D, ** J, ** L, ** R;
@@ -12,24 +13,32 @@ pthread_t * RThreads;
 //CREATE SEMAPHORES
 sem_t * JSemaphores;
 sem_t * LSemaphores;
-sem_t * RSemaphores;
+
+using namespace std;
 
 //CREATE THREAD FUNCTIONS
-int Sum_Thread_J(int row){
+void* Sum_Thread_J(void* arg){
+    int row = *((int *)arg);
     for(int i = 0; i < A_cols; i++){
         J[row][i]= A[row][i] + B[row][i];
+        hw2_write_output(0, row+1, i+1 , J[row][i]);
     }
     //sem_post(&JSemaphores[row]);
-    return 0;
+    delete (int *)arg;
+    return NULL;
 }
-int Sum_Thread_L(int row){
+void* Sum_Thread_L(void* arg){
+    int row = *((int *)arg);
     for(int i = 0; i < C_cols; i++){
         L[row][i]= C[row][i] + D[row][i];
+        hw2_write_output(1, row+1, i+1 , L[row][i]);
     }
     //sem_post(&LSemaphores[row]);
-    return 0;
+    delete (int *)arg;
+    return NULL;
 }
-int Multiply_Thread(int row){ //matrix multiplication J * L
+void* Multiply_Thread(void* arg){ //matrix multiplication J * L
+    int row = *((int *)arg);
     int sum;
     for(int i = 0; i < C_cols; i++){
         sum = 0;
@@ -37,27 +46,31 @@ int Multiply_Thread(int row){ //matrix multiplication J * L
             sum += J[row][j] * L[j][i];
         }
         R[row][i] =sum;
+        hw2_write_output(2, row+1, i+1 , sum);
+
     }
     //sem_post(&RSemaphores[row]);
-    return 0;
+    delete (int *)arg;
+    return NULL;
 }
 
 
 int main(){
+    hw2_init_output();
     //TAKE INPUT
-    std::cin >> A_rows >> A_cols;
+    cin >> A_rows >> A_cols;
     A = new int*[A_rows];
     for(int i = 0; i < A_rows; i++){
         A[i] = new int[A_cols];
     }
     for(int i = 0; i < A_rows; i++){
         for(int j = 0; j < A_cols; j++){
-            std::cin >> A[i][j];
+            cin >> A[i][j];
         }
     }
-    std::cin >> B_rows >> B_cols;
+    cin >> B_rows >> B_cols;
     if(A_rows != B_rows || A_cols != B_cols){
-        std::cout << "Invalid input" << std::endl;
+        cerr << "Invalid input" << endl;
         return 0;
     }
     B = new int*[B_rows];
@@ -66,12 +79,12 @@ int main(){
     }
     for(int i = 0; i < B_rows; i++){
         for(int j = 0; j < B_cols; j++){
-            std::cin >> B[i][j];
+            cin >> B[i][j];
         }
     }
-    std::cin >> C_rows >> C_cols;
+    cin >> C_rows >> C_cols;
     if(A_cols != C_rows){
-        std::cout << "Invalid input" << std::endl;
+        cerr << "Invalid input" << endl;
         return 0;
     }
     C = new int*[C_rows];
@@ -80,12 +93,12 @@ int main(){
     }
     for(int i = 0; i < C_rows; i++){
         for(int j = 0; j < C_cols; j++){
-            std::cin >> C[i][j];
+            cin >> C[i][j];
         }
     }
-    std::cin >> D_rows >> D_cols;
+    cin >> D_rows >> D_cols;
     if(C_rows != D_rows || C_cols != D_cols){
-        std::cout << "Invalid input" << std::endl;
+        cerr << "Invalid input" << endl;
         return 0;
     }
     D = new int*[D_rows];
@@ -94,7 +107,7 @@ int main(){
     }
     for(int i = 0; i < D_rows; i++){
         for(int j = 0; j < D_cols; j++){
-            std::cin >> D[i][j];
+            cin >> D[i][j];
         }
     }
 
@@ -117,25 +130,39 @@ int main(){
     RThreads = new pthread_t[A_rows];
 
     //CREATE SEMAPHORES
-    JSemaphores = new sem_t[A_rows];
-    LSemaphores = new sem_t[C_rows];
-    RSemaphores = new sem_t[A_rows];
+    JSemaphores = new sem_t[A_rows];    
+    LSemaphores = new sem_t[C_cols];
 
     for(int i = 0; i < A_rows; i++){
-        Sum_Thread_J(i);
-        Sum_Thread_L(i);
-    }
-    for(int i = 0; i < A_rows; i++){
-        Multiply_Thread(i);
+        //initialize threads
+        pthread_create(&JThreads[i], NULL, Sum_Thread_J, (void *) new int(i));
+        pthread_create(&LThreads[i], NULL, Sum_Thread_L, (void *) new int(i));
+        //pthread_create(&RThreads[i], NULL, Multiply_Thread, (void *) &i);
     }
 
+    int ret;
+    for(int i = 0; i < A_rows; i++){
+        cerr << "Main thread waiting for thread " << i <<" in J to finish..." << endl;
+        ret = pthread_join(JThreads[i], NULL);
+        if (ret != 0) {
+            printf("pthread_join error: %d\n", ret);
+            return 1;
+        }
+
+        cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
+        ret = pthread_join(LThreads[i], NULL);
+        if (ret != 0) {
+            printf("pthread_join error: %d\n", ret);
+            return 1;
+        }
+    }
     //print J
-    std::cout << "J" << std::endl;
+    cerr << "J" << endl;
     for(int i = 0; i < A_rows; i++){
         for(int j = 0; j < A_cols; j++){
-            std::cout << J[i][j] << " ";
+            cerr << J[i][j] << " ";
         }
-        std::cout << std::endl;
+        cerr << endl;
     }
 
 
