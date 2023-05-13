@@ -196,12 +196,11 @@ int main(){
     }
 
     //print R
-    cerr << "R" << endl;
     for(int i = 0; i < A_rows; i++){
         for(int j = 0; j < C_cols; j++){
-            cerr << R[i][j] << " ";
+            cout << R[i][j] << " ";
         }
-        cerr << endl;
+        cout << endl;
     }
     //  Destroy Mutexes
     for(int i = 0; i < C_cols; i++){
