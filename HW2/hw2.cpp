@@ -23,7 +23,7 @@ void* Sum_Thread_J(void* arg){
         J[row][i]= A[row][i] + B[row][i];
         hw2_write_output(0, row+1, i+1 , J[row][i]);
     }
-    //sem_post(&JSemaphores[row]);
+    sem_post(&JSemaphores[row]);
     delete (int *)arg;
     return NULL;
 }
@@ -32,24 +32,33 @@ void* Sum_Thread_L(void* arg){
     for(int i = 0; i < C_cols; i++){
         L[row][i]= C[row][i] + D[row][i];
         hw2_write_output(1, row+1, i+1 , L[row][i]);
+        if(row == C_rows-1){
+
+            sem_post(&LSemaphores[i]);
+        }
     }
-    //sem_post(&LSemaphores[row]);
     delete (int *)arg;
     return NULL;
 }
 void* Multiply_Thread(void* arg){ //matrix multiplication J * L
     int row = *((int *)arg);
     int sum;
+    sem_wait(&JSemaphores[row]);
+    cout << "sem_wait1" << endl;
     for(int i = 0; i < C_cols; i++){
         sum = 0;
+        sem_wait(&LSemaphores[i]);
+        sem_post(&LSemaphores[i]);
+        
+        cout << "sem_wait2" << endl;
+
         for(int j = 0; j < C_rows; j++){
             sum += J[row][j] * L[j][i];
         }
+        cout << "sum: " << sum << endl;
         R[row][i] =sum;
         hw2_write_output(2, row+1, i+1 , sum);
-
     }
-    //sem_post(&RSemaphores[row]);
     delete (int *)arg;
     return NULL;
 }
@@ -129,7 +138,7 @@ int main(){
     LThreads = new pthread_t[C_rows];
     RThreads = new pthread_t[A_rows];
 
-    //CREATE SEMAPHORES
+    //CREATE AND INITIALIZE SEMAPHORES
     JSemaphores = new sem_t[A_rows];    
     LSemaphores = new sem_t[C_cols];
     for(int i = 0; i < A_rows; i++){
@@ -145,11 +154,12 @@ int main(){
         }
     }
 
-    for(int i = 0; i < A_rows; i++){
-        //initialize threads
+    for(int i = 0; i < A_rows; i++){    // INITIALIZE THREADS        
         pthread_create(&JThreads[i], NULL, Sum_Thread_J, (void *) new int(i));
+        pthread_create(&RThreads[i], NULL, Multiply_Thread, (void *) new int(i));
+    }
+    for(int i = 0; i < C_rows; i++){
         pthread_create(&LThreads[i], NULL, Sum_Thread_L, (void *) new int(i));
-        //pthread_create(&RThreads[i], NULL, Multiply_Thread, (void *) &i);
     }
 
     int ret;
@@ -161,6 +171,14 @@ int main(){
             return 1;
         }
 
+        cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
+        ret = pthread_join(RThreads[i], NULL);
+        if (ret != 0) {
+            printf("pthread_join error: %d\n", ret);
+            return 1;
+        }
+    }
+    for(int i = 0; i < C_rows; i++){
         cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
         ret = pthread_join(LThreads[i], NULL);
         if (ret != 0) {
@@ -177,8 +195,14 @@ int main(){
         cerr << endl;
     }
 
-
-
+    //print R
+    cerr << "R" << endl;
+    for(int i = 0; i < A_rows; i++){
+        for(int j = 0; j < C_cols; j++){
+            cerr << R[i][j] << " ";
+        }
+        cerr << endl;
+    }
 
     return 0;
 }
