@@ -5,10 +5,12 @@
 
 int A_rows, A_cols, B_rows, B_cols, C_rows, C_cols, D_rows, D_cols;
 int ** A, ** B, ** C, ** D, ** J, ** L, ** R;
+int * L_columns;
 //CREATE THREADS
 pthread_t * JThreads;
 pthread_t * LThreads;
 pthread_t * RThreads;   
+pthread_mutex_t * LMutexes;
 
 //CREATE SEMAPHORES
 sem_t * JSemaphores;
@@ -32,10 +34,13 @@ void* Sum_Thread_L(void* arg){
     for(int i = 0; i < C_cols; i++){
         L[row][i]= C[row][i] + D[row][i];
         hw2_write_output(1, row+1, i+1 , L[row][i]);
-        if(row == C_rows-1){
-
+        pthread_mutex_lock(&LMutexes[i]);
+        L_columns[i]++;
+        if(L_columns[i] == C_rows){
             sem_post(&LSemaphores[i]);
         }
+        pthread_mutex_unlock(&LMutexes[i]);
+
     }
     delete (int *)arg;
     return NULL;
@@ -44,25 +49,19 @@ void* Multiply_Thread(void* arg){ //matrix multiplication J * L
     int row = *((int *)arg);
     int sum;
     sem_wait(&JSemaphores[row]);
-    cout << "sem_wait1" << endl;
     for(int i = 0; i < C_cols; i++){
         sum = 0;
         sem_wait(&LSemaphores[i]);
         sem_post(&LSemaphores[i]);
-        
-        cout << "sem_wait2" << endl;
-
         for(int j = 0; j < C_rows; j++){
             sum += J[row][j] * L[j][i];
         }
-        cout << "sum: " << sum << endl;
         R[row][i] =sum;
         hw2_write_output(2, row+1, i+1 , sum);
     }
     delete (int *)arg;
     return NULL;
 }
-
 
 int main(){
     hw2_init_output();
@@ -120,6 +119,11 @@ int main(){
         }
     }
 
+    L_columns = new int[C_cols];
+    for(int i = 0; i < C_cols; i++){
+        L_columns[i] = 0;
+    }
+
     J = new int*[A_rows];  // A + B matrix
     for(int i = 0; i < A_rows; i++){
         J[i] = new int[A_cols];
@@ -138,6 +142,10 @@ int main(){
     LThreads = new pthread_t[C_rows];
     RThreads = new pthread_t[A_rows];
 
+    LMutexes = new pthread_mutex_t[C_cols];
+    for(int i = 0; i < C_cols; i++){
+        pthread_mutex_init(&LMutexes[i], NULL);
+    }
     //CREATE AND INITIALIZE SEMAPHORES
     JSemaphores = new sem_t[A_rows];    
     LSemaphores = new sem_t[C_cols];
@@ -164,14 +172,14 @@ int main(){
 
     int ret;
     for(int i = 0; i < A_rows; i++){
-        cerr << "Main thread waiting for thread " << i <<" in J to finish..." << endl;
+        //cerr << "Main thread waiting for thread " << i <<" in J to finish..." << endl;
         ret = pthread_join(JThreads[i], NULL);
         if (ret != 0) {
             printf("pthread_join error: %d\n", ret);
             return 1;
         }
 
-        cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
+        //cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
         ret = pthread_join(RThreads[i], NULL);
         if (ret != 0) {
             printf("pthread_join error: %d\n", ret);
@@ -179,20 +187,12 @@ int main(){
         }
     }
     for(int i = 0; i < C_rows; i++){
-        cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
+        //cerr << "Main thread waiting for thread " << i <<" in L to finish..." << endl;
         ret = pthread_join(LThreads[i], NULL);
         if (ret != 0) {
             printf("pthread_join error: %d\n", ret);
             return 1;
         }
-    }
-    //print J
-    cerr << "J" << endl;
-    for(int i = 0; i < A_rows; i++){
-        for(int j = 0; j < A_cols; j++){
-            cerr << J[i][j] << " ";
-        }
-        cerr << endl;
     }
 
     //print R
@@ -203,6 +203,9 @@ int main(){
         }
         cerr << endl;
     }
-
+    //  Destroy Mutexes
+    for(int i = 0; i < C_cols; i++){
+        pthread_mutex_destroy(&LMutexes[i]);
+    }
     return 0;
 }
